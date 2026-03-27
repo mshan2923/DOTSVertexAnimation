@@ -11,7 +11,7 @@
 //            VertexID(Float), VertexCount(Float),
 //            CurrentFrame(Float), FrameCount(Float),
 //            PosMin(Float), PosRange(Float)
-//   Outputs: PositionOffset(Vector3)
+//   Outputs: Position(Vector3)
 // ──────────────────────────────────────────────────────────────────────────────
 void VATSamplePosition_float(
     UnityTexture2D      PosTex,
@@ -24,17 +24,20 @@ void VATSamplePosition_float(
     float               PosRange,
     out float3          Position)
 {
-    // 텍스처 UV : X = 버텍스, Y = 프레임
-    float2 uv = float2(
-        (VertexID + 0.5) / VertexCount,
-        (CurrentFrame + 0.5) / FrameCount
-    );
+    float  vertU      = (VertexID + 0.5) / VertexCount;
+    float  frameF     = frac(CurrentFrame);              // 소수점 = 보간 비율
+    float  frameA     = floor(CurrentFrame);
+    float  frameB     = fmod(frameA + 1.0, FrameCount);  // 루프 처리
 
-    // 샘플링 (LOD 고정 : mip 0)
-    float3 encoded = SAMPLE_TEXTURE2D_LOD(PosTex.tex, PosSampler.samplerstate, uv, 0).rgb;
+    float2 uvA = float2(vertU, (frameA + 0.5) / FrameCount);
+    float2 uvB = float2(vertU, (frameB + 0.5) / FrameCount);
 
-    // [0,1] → 실제 절대 위치 복원
-    Position = encoded * PosRange + PosMin;
+    // 현재 프레임 + 다음 프레임 샘플링 후 보간
+    float3 posA = SAMPLE_TEXTURE2D_LOD(PosTex.tex, PosSampler.samplerstate, uvA, 0).rgb;
+    float3 posB = SAMPLE_TEXTURE2D_LOD(PosTex.tex, PosSampler.samplerstate, uvB, 0).rgb;
+
+    // [0,1] → 실제 절대 위치 복원 + 프레임 보간
+    Position = lerp(posA, posB, frameF) * PosRange + PosMin;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -57,15 +60,19 @@ void VATSampleNormal_float(
     float               FrameCount,
     out float3          Normal)
 {
-    float2 uv = float2(
-        (VertexID + 0.5) / VertexCount,
-        (CurrentFrame + 0.5) / FrameCount
-    );
+    float  vertU  = (VertexID + 0.5) / VertexCount;
+    float  frameF = frac(CurrentFrame);
+    float  frameA = floor(CurrentFrame);
+    float  frameB = fmod(frameA + 1.0, FrameCount);
 
-    float3 encoded = SAMPLE_TEXTURE2D_LOD(NormTex.tex, NormSampler.samplerstate, uv, 0).rgb;
+    float2 uvA = float2(vertU, (frameA + 0.5) / FrameCount);
+    float2 uvB = float2(vertU, (frameB + 0.5) / FrameCount);
 
-    // [0,1] → [-1,1] 복원
-    Normal = encoded * 2.0 - 1.0;
+    float3 normA = SAMPLE_TEXTURE2D_LOD(NormTex.tex, NormSampler.samplerstate, uvA, 0).rgb;
+    float3 normB = SAMPLE_TEXTURE2D_LOD(NormTex.tex, NormSampler.samplerstate, uvB, 0).rgb;
+
+    // [0,1] → [-1,1] 복원 + 보간
+    Normal = normalize(lerp(normA, normB, frameF) * 2.0 - 1.0);
 }
 
 #endif // VAT_SAMPLE_INCLUDED

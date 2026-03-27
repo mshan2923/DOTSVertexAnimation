@@ -12,7 +12,7 @@ public struct VATAnimationData : IComponentData
     public float FrameCount;        // 총 프레임 수
     public float Fps;               // 재생 FPS
     public float PlaybackSpeed;     // 배속 (1.0 = 정배속)
-    public bool IsLooping;         // 루프 여부
+    public bool  IsLooping;         // 루프 여부
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -57,8 +57,8 @@ public partial struct VATAnimationSystem : ISystem
                 a.CurrentFrame = math.min(a.CurrentFrame, a.FrameCount - 1);
             }
 
-            // 셰이더 프로퍼티 동기화
-            frameProp.ValueRW.Value = math.floor(a.CurrentFrame);
+            // 셰이더 프로퍼티 동기화 (소수점 포함 → 셰이더에서 보간)
+            frameProp.ValueRW.Value = a.CurrentFrame;
         }
     }
 }
