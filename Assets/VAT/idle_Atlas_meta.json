@@ -1,0 +1,23 @@
+{
+    "atlasName": "idle_Atlas",
+    "posMin": -0.5718085765838623,
+    "posMax": 1.8091415166854859,
+    "posRange": 2.3809499740600588,
+    "vertexCount": 1748,
+    "totalFrames": 39,
+    "fps": 30,
+    "clips": [
+        {
+            "clipName": "Idle",
+            "startFrame": 0,
+            "frameCount": 10,
+            "clipLength": 0.3333333432674408
+        },
+        {
+            "clipName": "Walking",
+            "startFrame": 10,
+            "frameCount": 29,
+            "clipLength": 0.9666666984558106
+        }
+    ]
+}

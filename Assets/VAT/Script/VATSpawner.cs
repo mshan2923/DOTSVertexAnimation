@@ -47,7 +47,8 @@ public class VATSpawner : MonoBehaviour
             typeof(LocalTransform),
             typeof(LocalToWorld),
             typeof(VATAnimationData),
-            typeof(VATCurrentFrameProperty));
+            typeof(VATCurrentFrameProperty),
+            typeof(VATAnimIDProperty));
 
         // 엔티티 배치 스폰
         using var entities = em.CreateEntity(archetype, SpawnCount, Unity.Collections.Allocator.Temp);

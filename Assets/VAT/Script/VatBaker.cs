@@ -3,56 +3,34 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-/// <summary>
-/// Vertex Animation Texture (VAT) Baker
-/// - SkinnedMeshRenderer + AnimationClip ¡æ Position Texture + Normal Texture
-/// - RGBAHalf Æ÷¸ËÀ¸·Î ÀúÀå (URP ÃÖÀûÈ­)
-/// </summary>
 public class VATBaker : EditorWindow
 {
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // Inspector Fields
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
     private GameObject _targetObject;
-    private AnimationClip _clip;
+    private List<AnimationClip> _clips = new List<AnimationClip>();
     private SkinnedMeshRenderer _selectedSmr;
     private string[] _smrNames;
     private int _smrIndex;
     private int _fps = 30;
     private bool _bakeNormals = true;
     private string _savePath = "Assets/VAT";
-
-    // ³»ºÎ »óÅÂ
     private string _statusMessage = "";
     private bool _isBaking = false;
+    private Vector2 _scrollPos;
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // Menu Item
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    [MenuItem("Tools/VAT Baker")]
-    public static void OpenWindow()
-    {
-        var window = GetWindow<VATBaker>("VAT Baker");
-        window.minSize = new Vector2(360, 320);
-    }
+    [MenuItem("Tools/VAT Baker (Atlas)")]
+    public static void OpenWindow() => GetWindow<VATBaker>("VAT Baker").minSize = new Vector2(400, 450);
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // GUI
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
     private void OnGUI()
     {
-        GUILayout.Label("Vertex Animation Texture Baker", EditorStyles.boldLabel);
-        EditorGUILayout.Space(4);
+        GUILayout.Label("VAT Atlas Baker", EditorStyles.boldLabel);
+        _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
 
         var prevTarget = _targetObject;
-        _targetObject = (GameObject)EditorGUILayout.ObjectField(
-            "Target Object", _targetObject, typeof(GameObject), true);
+        _targetObject = (GameObject)EditorGUILayout.ObjectField("Target Object", _targetObject, typeof(GameObject), true);
 
-        // Target ¹Ù²î¸é SMR ¸ñ·Ï °»½Å
         if (_targetObject != prevTarget)
         {
             _smrIndex = 0;
-            _selectedSmr = null;
             if (_targetObject != null)
             {
                 var smrs = _targetObject.GetComponentsInChildren<SkinnedMeshRenderer>();
@@ -61,216 +39,179 @@ public class VATBaker : EditorWindow
             else _smrNames = null;
         }
 
-        // SMR µå·Ó´Ù¿î
         if (_smrNames != null && _smrNames.Length > 0)
         {
             _smrIndex = EditorGUILayout.Popup("Skinned Mesh", _smrIndex, _smrNames);
             _selectedSmr = _targetObject.GetComponentsInChildren<SkinnedMeshRenderer>()[_smrIndex];
         }
 
-        _clip = (AnimationClip)EditorGUILayout.ObjectField(
-            "Animation Clip", _clip, typeof(AnimationClip), false);
+        EditorGUILayout.Space(10);
+        GUILayout.Label("Animation Clips", EditorStyles.miniBoldLabel);
+        for (int i = 0; i < _clips.Count; i++)
+        {
+            EditorGUILayout.BeginHorizontal();
+            _clips[i] = (AnimationClip)EditorGUILayout.ObjectField($"Clip {i}", _clips[i], typeof(AnimationClip), false);
+            if (GUILayout.Button("X", GUILayout.Width(20))) { _clips.RemoveAt(i); break; }
+            EditorGUILayout.EndHorizontal();
+        }
+        if (GUILayout.Button("Add Animation Clip")) _clips.Add(null);
 
+        EditorGUILayout.Space(10);
         _fps = EditorGUILayout.IntSlider("FPS", _fps, 1, 60);
         _bakeNormals = EditorGUILayout.Toggle("Bake Normals", _bakeNormals);
+        _savePath = EditorGUILayout.TextField("Save Path", _savePath);
+        EditorGUILayout.Space(20);
 
-        EditorGUILayout.Space(4);
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.PrefixLabel("Save Path");
-        _savePath = EditorGUILayout.TextField(_savePath);
-        if (GUILayout.Button("...", GUILayout.Width(30)))
-        {
-            string selected = EditorUtility.OpenFolderPanel("Select Save Folder", "Assets", "");
-            if (!string.IsNullOrEmpty(selected))
-            {
-                // Àý´ë °æ·Î ¡æ »ó´ë °æ·Î
-                if (selected.StartsWith(Application.dataPath))
-                    _savePath = "Assets" + selected.Substring(Application.dataPath.Length);
-            }
-        }
-        EditorGUILayout.EndHorizontal();
-
-        EditorGUILayout.Space(8);
-
-        // À¯È¿¼º °Ë»ç
-        bool canBake = _targetObject != null && _clip != null && _selectedSmr != null && !_isBaking;
-        if (!canBake && !_isBaking)
-        {
-            EditorGUILayout.HelpBox("Target Object, Skinned Mesh, Animation ClipÀ» ÁöÁ¤ÇØÁÖ¼¼¿ä.", MessageType.Info);
-        }
+        bool canBake = _targetObject != null && _selectedSmr != null && _clips.Count > 0 && !_isBaking;
+        foreach (var c in _clips) if (c == null) canBake = false;
 
         GUI.enabled = canBake;
-        if (GUILayout.Button(_isBaking ? "Baking..." : "Bake VAT", GUILayout.Height(36)))
-        {
-            Bake();
-        }
+        if (GUILayout.Button(_isBaking ? "Baking..." : "Bake VAT Atlas", GUILayout.Height(40))) Bake();
         GUI.enabled = true;
 
         if (!string.IsNullOrEmpty(_statusMessage))
-        {
-            EditorGUILayout.Space(4);
             EditorGUILayout.HelpBox(_statusMessage, MessageType.None);
-        }
+
+        EditorGUILayout.EndScrollView();
     }
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // Bake ¸ÞÀÎ ·ÎÁ÷
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
     private void Bake()
     {
         _isBaking = true;
         _statusMessage = "º£ÀÌÅ· ÁØºñ Áß...";
         Repaint();
 
+        // Æ®·£½ºÆû ¹é¾÷ + ¿øÁ¡ Á¤·Ä
+        var t = _targetObject.transform;
+        Vector3 oPos = t.position;
+        Quaternion oRot = t.rotation;
+        Vector3 oScl = t.localScale;
+        t.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+        t.localScale = Vector3.one;
+
         try
         {
-            // 1. SkinnedMeshRenderer È¹µæ (¼±ÅÃµÈ SMR »ç¿ë)
             var smr = _selectedSmr;
-            if (smr == null)
+            int vertCount = smr.sharedMesh.vertexCount;
+            int animCount = _clips.Count;
+
+            // ÇÁ·¹ÀÓ ¼ö / ¾ÆÆ²¶ó½º ¿ÀÇÁ¼Â °è»ê
+            int[] clipFrames = new int[animCount];
+            int[] startFrames = new int[animCount];
+            int totalFrames = 0;
+            for (int i = 0; i < animCount; i++)
             {
-                _statusMessage = "? SkinnedMeshRenderer¸¦ Ã£À» ¼ö ¾ø½À´Ï´Ù.";
-                return;
+                clipFrames[i] = Mathf.Max(1, Mathf.RoundToInt(_clips[i].length * _fps));
+                startFrames[i] = totalFrames;
+                totalFrames += clipFrames[i];
             }
 
-            // 2. ÇÁ·¹ÀÓ ¼ö °è»ê
-            int totalFrames = Mathf.Max(1, Mathf.RoundToInt(_clip.length * _fps));
-            float deltaTime = _clip.length / totalFrames;
-            int vertCount = smr.sharedMesh.vertexCount;
-
-            _statusMessage = $"¹öÅØ½º {vertCount}°³ ¡¿ {totalFrames}ÇÁ·¹ÀÓ º£ÀÌÅ· Áß...";
-            Repaint();
-
-            // 3. ÅØ½ºÃ³ Å©±â °áÁ¤ (¹öÅØ½º ¼ö¸¦ ³Êºñ, ÇÁ·¹ÀÓÀ» ³ôÀÌ)
-            //    ¡Ø GPU ÃÖ´ë ÅØ½ºÃ³ Å©±â 16384 ÃÊ°ú ½Ã °æ°í
             if (vertCount > 16384 || totalFrames > 16384)
             {
-                _statusMessage = $"? ÅØ½ºÃ³ Å©±â ÃÊ°ú (¹öÅØ½º:{vertCount}, ÇÁ·¹ÀÓ:{totalFrames}). ¸Þ½Ã ¶Ç´Â FPS/±æÀÌ¸¦ ÁÙ¿©ÁÖ¼¼¿ä.";
+                _statusMessage = $"? ÅØ½ºÃ³ Å©±â ÃÊ°ú (v:{vertCount}, f:{totalFrames})";
                 return;
             }
 
-            // 4. SampleAnimation ¹æ½Ä - rootGO È¹µæ
-            var rootGO = smr.transform.root.gameObject;
-
-            // 5. ¸ðµç ÇÁ·¹ÀÓ ¼øÈ¸ ¡æ ¿ÀÇÁ¼Â ¼öÁý + bounds °è»ê
-            var allOffsets = new Vector3[totalFrames * vertCount]; // Àý´ë À§Ä¡
-            var allNormals = new Vector3[totalFrames * vertCount];
+            var allPos = new Vector3[totalFrames * vertCount];
+            var allNorms = new Vector3[totalFrames * vertCount];
             float posMin = float.MaxValue, posMax = float.MinValue;
-
             var bakedMesh = new Mesh();
 
-            for (int f = 0; f < totalFrames; f++)
+            for (int i = 0; i < animCount; i++)
             {
-                float t = f * deltaTime;
-                SampleFrame(smr, rootGO, _clip, t, bakedMesh);
-
-                Vector3[] verts = bakedMesh.vertices;
-                Vector3[] normals = bakedMesh.normals;
-
-                for (int v = 0; v < vertCount; v++)
+                float dt = _clips[i].length / clipFrames[i];
+                for (int f = 0; f < clipFrames[i]; f++)
                 {
-                    // Àý´ë À§Ä¡ ÀúÀå (¿ÀÇÁ¼Â ¾Æ´Ô)
-                    Vector3 pos = verts[v];
-                    allOffsets[f * vertCount + v] = pos;
+                    // ¡Ú useScale = false : ·ÎÄÃ ½ºÆäÀÌ½º ±×´ë·Î (»½Æ¢±â ¹æÁö)
+                    _clips[i].SampleAnimation(_targetObject, f * dt);
+                    smr.BakeMesh(bakedMesh, false);
 
-                    posMin = Mathf.Min(posMin, pos.x, pos.y, pos.z);
-                    posMax = Mathf.Max(posMax, pos.x, pos.y, pos.z);
+                    int af = startFrames[i] + f;
+                    var verts = bakedMesh.vertices;
+                    var norms = bakedMesh.normals;
 
-                    if (_bakeNormals)
-                        allNormals[f * vertCount + v] = normals[v];
+                    for (int v = 0; v < vertCount; v++)
+                    {
+                        Vector3 p = verts[v];
+                        allPos[af * vertCount + v] = p;
+                        posMin = Mathf.Min(posMin, p.x, p.y, p.z);
+                        posMax = Mathf.Max(posMax, p.x, p.y, p.z);
+
+                        if (_bakeNormals)
+                            allNorms[af * vertCount + v] = norms[v];
+                    }
                 }
             }
 
-            // bounds°¡ 0ÀÏ ¶§ Ã³¸®
             if (Mathf.Approximately(posMin, posMax)) posMax = posMin + 0.001f;
+            float range = posMax - posMin;
+            string baseName = $"{_targetObject.name}_Atlas";
 
-            // 6. Position Texture »ý¼º (RGBAHalf)
+            // Position Texture
             var posTex = new Texture2D(vertCount, totalFrames, TextureFormat.RGBAHalf, false);
             posTex.filterMode = FilterMode.Bilinear;
             posTex.wrapMode = TextureWrapMode.Clamp;
-
-            var posColors = new Color[vertCount * totalFrames];
-            float range = posMax - posMin;
-
-            for (int f = 0; f < totalFrames; f++)
-            {
-                for (int v = 0; v < vertCount; v++)
-                {
-                    Vector3 offset = allOffsets[f * vertCount + v];
-                    // [posMin, posMax] ¡æ [0, 1] Á¤±ÔÈ­
-                    float r = (offset.x - posMin) / range;
-                    float g = (offset.y - posMin) / range;
-                    float b = (offset.z - posMin) / range;
-                    posColors[f * vertCount + v] = new Color(r, g, b, 1f);
-                }
-            }
+            var posColors = new Color[allPos.Length];
+            for (int i = 0; i < allPos.Length; i++)
+                posColors[i] = new Color(
+                    (allPos[i].x - posMin) / range,
+                    (allPos[i].y - posMin) / range,
+                    (allPos[i].z - posMin) / range, 1f);
             posTex.SetPixels(posColors);
             posTex.Apply();
 
-            // 7. Normal Texture »ý¼º (RGBAHalf, [-1,1] ¡æ [0,1])
+            // Normal Texture
             Texture2D normTex = null;
             if (_bakeNormals)
             {
                 normTex = new Texture2D(vertCount, totalFrames, TextureFormat.RGBAHalf, false);
                 normTex.filterMode = FilterMode.Bilinear;
                 normTex.wrapMode = TextureWrapMode.Clamp;
-
-                var normColors = new Color[vertCount * totalFrames];
-                for (int i = 0; i < allNormals.Length; i++)
-                {
-                    Vector3 n = allNormals[i];
+                var normColors = new Color[allNorms.Length];
+                for (int i = 0; i < allNorms.Length; i++)
                     normColors[i] = new Color(
-                        n.x * 0.5f + 0.5f,
-                        n.y * 0.5f + 0.5f,
-                        n.z * 0.5f + 0.5f,
-                        1f);
-                }
+                        allNorms[i].x * 0.5f + 0.5f,
+                        allNorms[i].y * 0.5f + 0.5f,
+                        allNorms[i].z * 0.5f + 0.5f, 1f);
                 normTex.SetPixels(normColors);
                 normTex.Apply();
             }
 
-            // 8. UV1¿¡ VertexID ±Á±â (Shader Graph¿¡¼­ GetVertexID Custom Node ºÒÇÊ¿ä)
-            //    X = VertexID (Á¤¼ö), Y = 0
+            // Meta Texture (Å¬¸³º° startFrame / frameCount / fps)
+            var metaTex = new Texture2D(animCount, 1, TextureFormat.RGBAFloat, false);
+            metaTex.filterMode = FilterMode.Point;
+            metaTex.wrapMode = TextureWrapMode.Clamp;
+            var metaColors = new Color[animCount];
+            for (int i = 0; i < animCount; i++)
+                metaColors[i] = new Color(startFrames[i], clipFrames[i], _fps, 1f);
+            metaTex.SetPixels(metaColors);
+            metaTex.Apply();
+
+            // VAT ¸Þ½Ã (UV1 = VertexID)
             var vatMesh = Instantiate(smr.sharedMesh);
-            // ³ë¸Ö/ÅºÁ¨Æ® ¸í½ÃÀû º¹»ç (Instantiate ÈÄ À¯½Ç ¹æÁö)
             vatMesh.normals = smr.sharedMesh.normals;
             vatMesh.tangents = smr.sharedMesh.tangents;
-            var vertexIDs = new Vector2[vertCount];
-            for (int v = 0; v < vertCount; v++)
-                vertexIDs[v] = new Vector2(v, 0f);
-            vatMesh.uv2 = vertexIDs;
+            var vIDs = new Vector2[vertCount];
+            for (int v = 0; v < vertCount; v++) vIDs[v] = new Vector2(v, 0f);
+            vatMesh.uv2 = vIDs;
 
-            // 9. ÀúÀå
-            if (!Directory.Exists(_savePath))
-                Directory.CreateDirectory(_savePath);
-
-            string baseName = $"{_targetObject.name}_{_clip.name}";
+            // ÀúÀå
+            if (!Directory.Exists(_savePath)) Directory.CreateDirectory(_savePath);
             SaveTexture(posTex, Path.Combine(_savePath, $"{baseName}_pos.asset"));
             if (_bakeNormals)
                 SaveTexture(normTex, Path.Combine(_savePath, $"{baseName}_norm.asset"));
+            SaveTexture(metaTex, Path.Combine(_savePath, $"{baseName}_metaTex.asset"));
 
-            // VAT Àü¿ë ¸Þ½Ã ÀúÀå (UV1 Æ÷ÇÔ)
             string meshPath = Path.Combine(_savePath, $"{baseName}_mesh.asset");
             var existingMesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
-            if (existingMesh != null)
-            {
-                EditorUtility.CopySerialized(vatMesh, existingMesh);
-                AssetDatabase.SaveAssets();
-            }
-            else
-            {
-                AssetDatabase.CreateAsset(vatMesh, meshPath);
-            }
+            if (existingMesh != null) { EditorUtility.CopySerialized(vatMesh, existingMesh); AssetDatabase.SaveAssets(); }
+            else AssetDatabase.CreateAsset(vatMesh, meshPath);
 
-            // 10. ¸ÞÅ¸ µ¥ÀÌÅÍ ÀúÀå (¼ÎÀÌ´õ¿¡¼­ º¹¿ø¿¡ ÇÊ¿ä)
-            SaveMeta(baseName, posMin, posMax, vertCount, totalFrames, _fps);
-
-
-            // 11. ÀÓ½Ã ¸Þ½Ã Á¤¸®
-            DestroyImmediate(bakedMesh);
+            // JSON ¸ÞÅ¸ (1È¸¸¸!)
+            SaveMeta(baseName, posMin, posMax, vertCount, totalFrames, animCount, startFrames, clipFrames);
 
             AssetDatabase.Refresh();
-            _statusMessage = $"? ¿Ï·á! [{baseName}] pos/norm ÅØ½ºÃ³ ÀúÀåµÊ\n" +
-                             $"bounds: [{posMin:F4}, {posMax:F4}]  |  {vertCount}verts ¡¿ {totalFrames}frames";
+            _statusMessage = $"? ¿Ï·á! posRange: {range:F4}  |  {vertCount}verts ¡¿ {totalFrames}frames ({animCount}clips)";
         }
         catch (System.Exception e)
         {
@@ -279,80 +220,70 @@ public class VATBaker : EditorWindow
         }
         finally
         {
+            t.SetPositionAndRotation(oPos, oRot);
+            t.localScale = oScl;
             _isBaking = false;
             Repaint();
         }
     }
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // ÇïÆÛ : Æ¯Á¤ ½Ã°£¿¡ ¸Þ½Ã º£ÀÌÅ·
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    private static void SampleFrame(
-        SkinnedMeshRenderer smr,
-        GameObject rootGO,
-        AnimationClip clip,
-        float time,
-        Mesh outMesh)
-    {
-        // Å¬¸³À» ¿ÀºêÁ§Æ®¿¡ Á÷Á¢ Àû¿ë ¡æ ÈÞ¸Ó³ëÀÌµå Æ÷ÇÔ Áï½Ã ¹Ý¿µ
-        clip.SampleAnimation(rootGO, time);
-        smr.BakeMesh(outMesh, true);
-    }
-
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // ÇïÆÛ : Texture2D ¡æ .asset ÀúÀå
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    private static void SaveTexture(Texture2D tex, string path)
-    {
-        // ±âÁ¸ ¿¡¼ÂÀÌ ÀÖÀ¸¸é µ¤¾î¾²±â
-        var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-        if (existing != null)
-        {
-            EditorUtility.CopySerialized(tex, existing);
-            AssetDatabase.SaveAssets();
-        }
-        else
-        {
-            AssetDatabase.CreateAsset(tex, path);
-        }
-    }
-
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // ÇïÆÛ : ¼ÎÀÌ´õ º¹¿ø¿¡ ÇÊ¿äÇÑ ¸ÞÅ¸ µ¥ÀÌÅÍ¸¦ JSONÀ¸·Î ÀúÀå
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
     private void SaveMeta(string baseName, float posMin, float posMax,
-                          int vertCount, int totalFrames, int fps)
+                          int vertCount, int totalFrames, int animCount,
+                          int[] startFrames, int[] clipFrames)
     {
-        var meta = new VATMeta
+        var clips = new VATClipInfo[animCount];
+        for (int i = 0; i < animCount; i++)
+            clips[i] = new VATClipInfo
+            {
+                clipName = _clips[i].name,
+                startFrame = startFrames[i],
+                frameCount = clipFrames[i],
+                clipLength = _clips[i].length
+            };
+
+        var meta = new VATAtlasMeta
         {
-            clipName = _clip.name,
+            atlasName = baseName,
             posMin = posMin,
             posMax = posMax,
             posRange = posMax - posMin,
             vertexCount = vertCount,
-            frameCount = totalFrames,
-            fps = fps,
-            clipLength = _clip.length
+            totalFrames = totalFrames,
+            fps = _fps,
+            clips = clips
         };
 
-        string json = JsonUtility.ToJson(meta, true);
-        string path = Path.Combine(_savePath, $"{baseName}_meta.json");
-        File.WriteAllText(path, json);
+        File.WriteAllText(
+            Path.Combine(_savePath, $"{baseName}_meta.json"),
+            JsonUtility.ToJson(meta, true));
     }
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // ¸ÞÅ¸ µ¥ÀÌÅÍ ±¸Á¶Ã¼
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    [System.Serializable]
-    private class VATMeta
+    private static void SaveTexture(Texture2D tex, string path)
     {
-        public string clipName;
+        var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        if (existing != null) { EditorUtility.CopySerialized(tex, existing); AssetDatabase.SaveAssets(); }
+        else AssetDatabase.CreateAsset(tex, path);
+    }
+
+    [System.Serializable]
+    public class VATAtlasMeta
+    {
+        public string atlasName;
         public float posMin;
         public float posMax;
         public float posRange;
         public int vertexCount;
-        public int frameCount;
+        public int totalFrames;
         public int fps;
+        public VATClipInfo[] clips;
+    }
+
+    [System.Serializable]
+    public class VATClipInfo
+    {
+        public string clipName;
+        public int startFrame;
+        public int frameCount;
         public float clipLength;
     }
 }
